@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { createPost, toggleLike, toggleFollow } from "@/lib/db"
+import { createPost, toggleLike, toggleFollow, createComment, viewStory } from "@/lib/db"
 import { getCurrentUser } from "@/lib/auth"
 
 export async function createPostAction(formData: FormData) {
@@ -53,5 +53,38 @@ export async function toggleFollowAction(userId: number) {
     return { success: true, ...result }
   } catch (error) {
     return { error: "Failed to toggle follow" }
+  }
+}
+
+export async function createCommentAction(postId: number, content: string, parentCommentId?: number) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return { error: "Not authenticated" }
+  }
+
+  if (!content.trim()) {
+    return { error: "Comment content is required" }
+  }
+
+  try {
+    const comment = await createComment(user.id, postId, content, parentCommentId)
+    revalidatePath("/")
+    return { success: true, comment }
+  } catch (error) {
+    return { error: "Failed to create comment" }
+  }
+}
+
+export async function viewStoryAction(storyId: number) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return { error: "Not authenticated" }
+  }
+
+  try {
+    await viewStory(storyId, user.id)
+    return { success: true }
+  } catch (error) {
+    return { error: "Failed to view story" }
   }
 }

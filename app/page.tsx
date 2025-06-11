@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth"
-import { getPosts, getTrendingHashtags, getSuggestedUsers } from "@/lib/db"
+import { getPosts, getTrendingHashtags, getSuggestedUsers, getStories } from "@/lib/db"
 import { redirect } from "next/navigation"
 import { PostCard } from "@/components/post-card"
 import { CreatePost } from "@/components/create-post"
@@ -9,14 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Bell, Mail, Home, Compass, PlusSquare, User, Settings } from "lucide-react"
 import { logoutAction } from "./actions/auth"
 import Link from "next/link"
-
-const stories = [
-  { id: 1, user: "You", avatar: "/placeholder.svg?height=60&width=60", hasStory: false },
-  { id: 2, user: "Alex", avatar: "/placeholder.svg?height=60&width=60", hasStory: true },
-  { id: 3, user: "Sarah", avatar: "/placeholder.svg?height=60&width=60", hasStory: true },
-  { id: 4, user: "Marcus", avatar: "/placeholder.svg?height=60&width=60", hasStory: true },
-  { id: 5, user: "Emma", avatar: "/placeholder.svg?height=60&width=60", hasStory: true },
-]
+import { StorySection } from "@/components/story-section"
 
 export default async function SocialSphere() {
   const user = await getCurrentUser()
@@ -25,9 +18,13 @@ export default async function SocialSphere() {
     redirect("/auth/login")
   }
 
-  const posts = await getPosts(10, 0, user.id)
-  const trendingHashtags = await getTrendingHashtags()
-  const suggestedUsers = await getSuggestedUsers(user.id)
+  // Fetch data in parallel for better performance
+  const [posts, trendingHashtags, suggestedUsers, stories] = await Promise.all([
+    getPosts(10, 0, user.id),
+    getTrendingHashtags(),
+    getSuggestedUsers(user.id),
+    getStories(user.id),
+  ])
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -108,101 +105,83 @@ export default async function SocialSphere() {
         {/* Main Content */}
         <main className="flex-1 max-w-2xl mx-auto p-6">
           {/* Stories */}
-          <div className="mb-8">
-            <div className="flex space-x-4 overflow-x-auto pb-4">
-              {stories.map((story, index) => (
-                <div
-                  key={story.id}
-                  className="flex-shrink-0 text-center cursor-pointer group animate-fade-in"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  <div
-                    className={`relative transition-transform duration-200 group-hover:scale-110 ${
-                      story.hasStory ? "ring-2 ring-gradient-to-r from-purple-400 to-pink-400 rounded-full p-1" : ""
-                    }`}
-                  >
-                    <Avatar className="w-16 h-16">
-                      <AvatarImage src={story.avatar || "/placeholder.svg"} />
-                      <AvatarFallback>{story.user[0]}</AvatarFallback>
-                    </Avatar>
-                    {!story.hasStory && (
-                      <div className="absolute bottom-0 right-0 bg-purple-500 rounded-full w-5 h-5 flex items-center justify-center">
-                        <PlusSquare className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs mt-2 text-gray-400 group-hover:text-white transition-colors duration-200">
-                    {story.user}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
+          {stories.length > 0 && <StorySection stories={stories} />}
 
           {/* Create Post */}
           <CreatePost user={user} />
 
           {/* Posts Feed */}
           <div className="space-y-6">
-            {posts.map((post, index) => (
-              <PostCard key={post.id} post={post} index={index} />
-            ))}
+            {posts.length > 0 ? (
+              posts.map((post, index) => <PostCard key={post.id} post={post} index={index} />)
+            ) : (
+              <Card className="bg-gray-900 border-gray-700">
+                <CardContent className="p-12 text-center">
+                  <h3 className="text-xl font-semibold text-white mb-2">No posts yet</h3>
+                  <p className="text-gray-400">Be the first to share something!</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </main>
 
         {/* Right Sidebar */}
         <aside className="w-80 p-6 hidden xl:block">
           {/* Trending */}
-          <Card className="bg-gray-900 border-gray-700 mb-6 animate-fade-in">
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold mb-4 text-white">Trending Now</h3>
-              <div className="space-y-3">
-                {trendingHashtags.map((trend, index) => (
-                  <div
-                    key={trend.tag}
-                    className="cursor-pointer hover:bg-gray-800 p-2 rounded-lg transition-all duration-200 animate-slide-in-right"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <p className="font-medium text-purple-400">{trend.tag}</p>
-                    <p className="text-sm text-gray-400">{trend.posts}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {trendingHashtags.length > 0 && (
+            <Card className="bg-gray-900 border-gray-700 mb-6 animate-fade-in">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-semibold mb-4 text-white">Trending Now</h3>
+                <div className="space-y-3">
+                  {trendingHashtags.map((trend, index) => (
+                    <div
+                      key={trend.tag}
+                      className="cursor-pointer hover:bg-gray-800 p-2 rounded-lg transition-all duration-200 animate-slide-in-right"
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    >
+                      <p className="font-medium text-purple-400">{trend.tag}</p>
+                      <p className="text-sm text-gray-400">{trend.posts}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Suggested Users */}
-          <Card className="bg-gray-900 border-gray-700 animate-fade-in" style={{ animationDelay: "200ms" }}>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold mb-4 text-white">Suggested for You</h3>
-              <div className="space-y-4">
-                {suggestedUsers.map((suggestedUser, index) => (
-                  <div
-                    key={suggestedUser.id}
-                    className="flex items-center justify-between animate-slide-in-right"
-                    style={{ animationDelay: `${(index + 3) * 100}ms` }}
-                  >
-                    <Link href={`/profile/${suggestedUser.username}`} className="flex items-center space-x-3 flex-1">
-                      <Avatar className="w-10 h-10">
-                        <AvatarImage src={suggestedUser.avatar_url || "/placeholder.svg"} />
-                        <AvatarFallback>{suggestedUser.full_name[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-white">{suggestedUser.full_name}</p>
-                        <p className="text-sm text-gray-400">{suggestedUser.mutual} mutual connections</p>
-                      </div>
-                    </Link>
-                    <Button
-                      size="sm"
-                      className="bg-purple-600 hover:bg-purple-700 transition-all duration-200 transform hover:scale-105"
+          {suggestedUsers.length > 0 && (
+            <Card className="bg-gray-900 border-gray-700 animate-fade-in" style={{ animationDelay: "200ms" }}>
+              <CardContent className="p-6">
+                <h3 className="text-lg font-semibold mb-4 text-white">Suggested for You</h3>
+                <div className="space-y-4">
+                  {suggestedUsers.map((suggestedUser, index) => (
+                    <div
+                      key={suggestedUser.id}
+                      className="flex items-center justify-between animate-slide-in-right"
+                      style={{ animationDelay: `${(index + 3) * 100}ms` }}
                     >
-                      Follow
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                      <Link href={`/profile/${suggestedUser.username}`} className="flex items-center space-x-3 flex-1">
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={suggestedUser.avatar_url || "/placeholder.svg"} />
+                          <AvatarFallback>{suggestedUser.full_name[0]}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium text-white">{suggestedUser.full_name}</p>
+                          <p className="text-sm text-gray-400">{suggestedUser.mutual} mutual connections</p>
+                        </div>
+                      </Link>
+                      <Button
+                        size="sm"
+                        className="bg-purple-600 hover:bg-purple-700 transition-all duration-200 transform hover:scale-105"
+                      >
+                        Follow
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </aside>
       </div>
 
